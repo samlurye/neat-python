@@ -1,5 +1,6 @@
 from neat.graphs import feed_forward_layers
 from neat.six_util import itervalues
+import numpy as np
 
 
 class FeedForwardNetwork(object):
@@ -15,11 +16,12 @@ class FeedForwardNetwork(object):
 
         for k, v in zip(self.input_nodes, inputs):
             self.values[k] = v
-
+            
         for node, act_func, agg_func, bias, response, links in self.node_evals:
             node_inputs = []
             for i, w in links:
                 node_inputs.append(self.values[i] * w)
+            node_inputs = np.array(node_inputs)
             s = agg_func(node_inputs)
             self.values[node] = act_func(bias + response * s)
 

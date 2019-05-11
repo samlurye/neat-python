@@ -86,6 +86,23 @@ class BaseReporter(object):
     def info(self, msg):
         pass
 
+class ModularityReporter(BaseReporter):
+
+    def __init__(self, freq):
+        self.freq = freq
+        self.ctr = 0
+        self.means = []
+        self.best = []
+        self.stddevs = []
+
+    def post_evaluate(self, config, population, species, best_genome):
+        if not self.ctr % self.freq:
+            self.best.append(best_genome.modularity())
+            modularities = [g.modularity() for g in itervalues(population)]
+            self.means.append(mean(modularities))
+            self.stddevs.append(stdev(modularities))
+            print("\n\nMODULARITY (MOST FIT): {:.4f}\nMEAN MODULARITY: {:.4f}\n\n".format(self.best[-1], self.means[-1]))
+        self.ctr += 1
 
 class StdOutReporter(BaseReporter):
     """Uses `print` to output information about the run; an example reporter class."""

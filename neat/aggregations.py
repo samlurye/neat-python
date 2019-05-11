@@ -6,6 +6,7 @@ and code for adding new user-defined ones.
 import sys
 import types
 import warnings
+import numpy as np
 
 from operator import mul
 
@@ -14,40 +15,35 @@ from neat.math_util import mean, median2
 if sys.version_info[0] > 2:
     from functools import reduce
 
-
-def product_aggregation(x):  # note: `x` is a list or other iterable
+def product_aggregation(x): # note: `x` is a list or other iterable
     return reduce(mul, x, 1.0)
-
 
 def sum_aggregation(x):
     return sum(x)
 
+def sum_np(x):
+    return x.sum(axis=0)
 
 def max_aggregation(x):
     return max(x)
 
-
 def min_aggregation(x):
     return min(x)
-
 
 def maxabs_aggregation(x):
     return max(x, key=abs)
 
-
 def median_aggregation(x):
     return median2(x)
 
-
 def mean_aggregation(x):
     return mean(x)
-
 
 class InvalidAggregationFunction(TypeError):
     pass
 
 
-def validate_aggregation(function):  # TODO: Recognize when need `reduce`
+def validate_aggregation(function): # TODO: Recognize when need `reduce`
     if not isinstance(function,
                       (types.BuiltinFunctionType,
                        types.FunctionType,
@@ -70,6 +66,7 @@ class AggregationFunctionSet(object):
         self.add('maxabs', maxabs_aggregation)
         self.add('median', median_aggregation)
         self.add('mean', mean_aggregation)
+        self.add('sum_np', sum_np)
 
     def add(self, name, function):
         validate_aggregation(function)

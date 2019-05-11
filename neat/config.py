@@ -2,6 +2,7 @@
 from __future__ import print_function
 
 import os
+#import sys
 import warnings
 
 try:
@@ -11,10 +12,8 @@ except ImportError:
 
 from neat.six_util import iterkeys
 
-
 class ConfigParameter(object):
     """Contains information about one configuration item."""
-
     def __init__(self, name, value_type, default=None):
         self.name = name
         self.value_type = value_type
@@ -104,7 +103,6 @@ class UnknownConfigItemError(NameError):
     """Error for unknown configuration option - partially to catch typos."""
     pass
 
-
 class DefaultClassConfig(object):
     """
     Replaces at least some boilerplate configuration code
@@ -117,7 +115,7 @@ class DefaultClassConfig(object):
         for p in param_list:
             setattr(self, p.name, p.interpret(param_dict))
             param_list_names.append(p.name)
-        unknown_list = [x for x in iterkeys(param_dict) if x not in param_list_names]
+        unknown_list = [x for x in iterkeys(param_dict) if not x in param_list_names]
         if unknown_list:
             if len(unknown_list) > 1:
                 raise UnknownConfigItemError("Unknown configuration items:\n" +
@@ -178,7 +176,7 @@ class Config(object):
                                   DeprecationWarning)
             param_list_names.append(p.name)
         param_dict = dict(parameters.items('NEAT'))
-        unknown_list = [x for x in iterkeys(param_dict) if x not in param_list_names]
+        unknown_list = [x for x in iterkeys(param_dict) if not x in param_list_names]
         if unknown_list:
             if len(unknown_list) > 1:
                 raise UnknownConfigItemError("Unknown (section 'NEAT') configuration items:\n" +

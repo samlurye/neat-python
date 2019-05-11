@@ -3,7 +3,8 @@ from __future__ import division, print_function
 
 
 from itertools import count
-from random import choice, random, shuffle
+from random import choice, random, shuffle, randint, gauss
+import copy
 
 import sys
 
@@ -14,6 +15,7 @@ from neat.genes import DefaultConnectionGene, DefaultNodeGene
 from neat.graphs import creates_cycle
 from neat.six_util import iteritems, iterkeys
 
+import numpy as np
 
 class DefaultGenomeConfig(object):
     """Sets up and holds configuration information for the DefaultGenome class."""
@@ -128,6 +130,17 @@ class DefaultGenomeConfig(object):
             error_string = "Invalid structural_mutation_surer {!r}".format(
                 self.structural_mutation_surer)
             raise RuntimeError(error_string)
+
+class LayeredGenomeConfig(DefaultGenomeConfig):
+
+    def __init__(self, params):
+        super().__init__(params)
+        _params = [ConfigParameter('num_hidden_per_layer', list),
+                   ConfigParameter('connectivity', float)]
+        for p in _params:
+            setattr(self, p.name, p.interpret(params))
+        self.num_hidden_per_layer = [int(i) for i in self.num_hidden_per_layer]
+        self.num_layers = len(self.num_hidden_per_layer) + 2
 
 class DefaultGenome(object):
     """
@@ -307,6 +320,8 @@ class DefaultGenome(object):
             if config.check_structural_mutation_surer():
                 self.mutate_add_connection(config)
             return
+
+        new_node_id = config.get_new_node_key(self.nodes)
 
         # Choose a random connection to split
         conn_to_split = choice(list(self.connections.values()))
@@ -568,3 +583,328 @@ class DefaultGenome(object):
         for input_id, output_id in all_connections[:num_to_add]:
             connection = self.create_connection(config, input_id, output_id)
             self.connections[connection.key] = connection
+
+class LayeredGenome(DefaultGenome):
+
+    def __init__(self, key):
+        super().__init__(key)
+
+    @classmethod
+    def parse_config(cls, param_dict):
+        param_dict['node_gene_type'] = DefaultNodeGene
+        param_dict['connection_gene_type'] = DefaultConnectionGene
+        return LayeredGenomeConfig(param_dict)
+
+    def configure_new(self, config):
+        self.layers = [[] for _ in range(config.num_layers)]
+
+        for node_key in config.input_keys:
+            self.layers[0].append(node_key)
+
+        # Create node genes for the output pins.
+        for node_key in config.output_keys:
+            self.nodes[node_key] = self.create_node(config, node_key)
+            self.layers[-1].append(node_key)
+
+        for i in range(1, config.num_layers - 1):
+            for _ in range(config.num_hidden_per_layer[i - 1]):
+                node_key = config.get_new_node_key(self.nodes)
+                assert node_key not in self.nodes
+                node = self.create_node(config, node_key)
+                self.nodes[node_key] = node
+                self.layers[i].append(node_key)
+
+        connections = self.compute_full_connections(config)
+        shuffle(connections)
+        num_to_add = int(round(len(connections) * config.connectivity))
+        for input_id, output_id in connections[:num_to_add]:
+            connection = self.create_connection(config, input_id, output_id)
+            self.connections[connection.key] = connection
+
+    def compute_full_connections(self, config):
+        output = [i for i in iterkeys(self.nodes) if i in config.output_keys]
+        connections = []
+        for input_id in config.input_keys:
+            for h in self.layers[1]:
+                connections.append((input_id, h))
+        for i in range(1, len(self.layers) - 1):
+            for input_id in self.layers[i]:
+                for output_id in self.layers[i + 1]:
+                    connections.append((input_id, output_id))
+        return connections
+
+    def configure_crossover(self, genome1, genome2, config):
+        """ Configure a new genome by crossover from two parent genomes. """
+        assert isinstance(genome1.fitness, (int, float))
+        assert isinstance(genome2.fitness, (int, float))
+        if genome1.fitness > genome2.fitness:
+            parent1, parent2 = genome1, genome2
+        else:
+            parent1, parent2 = genome2, genome1
+
+        # Inherit connection genes
+        for key, cg1 in iteritems(parent1.connections):
+            cg2 = parent2.connections.get(key)
+            if cg2 is None:
+                # Excess or disjoint gene: copy from the fittest parent.
+                self.connections[key] = cg1.copy()
+            else:
+                # Homologous gene: combine genes from both parents.
+                self.connections[key] = cg1.crossover(cg2)
+
+        # Inherit node genes
+        parent1_set = parent1.nodes
+        parent2_set = parent2.nodes
+
+        for key, ng1 in iteritems(parent1_set):
+            ng2 = parent2_set.get(key)
+            assert key not in self.nodes
+            if ng2 is None:
+                # Extra gene: copy from the fittest parent
+                self.nodes[key] = ng1.copy()
+            else:
+                # Homologous gene: combine genes from both parents.
+                self.nodes[key] = ng1.crossover(ng2)
+
+        self.layers = copy.deepcopy(parent1.layers)
+
+    def mutate_add_node(self, config):
+        if not self.connections:
+            if config.check_structural_mutation_surer():
+                self.mutate_add_connection(config)
+            return
+
+        if len(self.nodes) >= 30:
+            return
+
+        new_node_layer = randint(1, len(self.layers) - 2)
+        new_node_id = config.get_new_node_key(self.nodes)
+        self.layers[new_node_layer].append(new_node_id)
+        self.nodes[new_node_id] = self.create_node(config, new_node_id)
+
+        input_id = choice(self.layers[new_node_layer - 1])
+        output_id = choice(self.layers[new_node_layer + 1])
+        self.add_connection(config, input_id, new_node_id, gauss(0, 0.1), True)
+        self.add_connection(config, new_node_id, output_id, gauss(0, 0.1), True)
+
+    def mutate_add_connection(self, config):
+        """
+        Attempt to add a new connection, the only restriction being that the output
+        node cannot be one of the network input pins.
+        """
+        
+        in_layer = randint(0, len(self.layers) - 2)
+        out_layer = in_layer + 1
+
+        in_node = choice(self.layers[in_layer])
+        out_node = choice(self.layers[out_layer])
+
+        # Don't duplicate connections.
+        key = (in_node, out_node)
+        if key in self.connections:
+            # TODO: Should this be using mutation to/from rates? Hairy to configure...
+            if config.check_structural_mutation_surer():
+                self.connections[key].enabled = True
+            return
+
+        cg = self.create_connection(config, in_node, out_node)
+        self.connections[cg.key] = cg
+
+    def mutate_delete_node(self, config):
+        layer_perm = list(range(1, len(self.layers) - 2))
+        shuffle(layer_perm)
+        del_key = -1
+        del_key_layer = None
+        for l in layer_perm:
+            if len(self.layers[l]) > 1:
+                del_key = choice(self.layers[l])
+                del_key_layer = l
+                break
+
+        if del_key == -1:
+            return -1
+
+        connections_to_delete = set()
+        for k, v in iteritems(self.connections):
+            if del_key in v.key:
+                connections_to_delete.add(v.key)
+
+        for key in connections_to_delete:
+            del self.connections[key]
+
+        del self.nodes[del_key]
+        self.layers[del_key_layer].remove(del_key)
+
+        return del_key
+
+    def modularity(self):
+        return self._directed_louvain(self._get_adj_mat())
+        
+    def _map_nodes(self):
+        node_map = {}
+        i_next = 0
+        for v in self.layers[0]:
+            node_map[v] = i_next
+            i_next += 1
+        for v in self.nodes:
+            node_map[v] = i_next
+            i_next += 1
+        return node_map
+
+    def _get_adj_mat(self):
+        adj = np.zeros((
+            len(self.nodes) + len(self.layers[0]), 
+            len(self.nodes) + len(self.layers[0])
+        ))
+        node_map = self._map_nodes()
+        for cg in self.connections.values():
+            if cg.enabled:
+                input_key, output_key = cg.key
+                adj[node_map[input_key], node_map[output_key]] = cg.weight
+        return adj
+
+    def _directed_louvain(self, adj):
+        n_nodes = adj.shape[0]
+        adj = abs(adj)
+        in_deg = adj.sum(axis=0)
+        out_deg = adj.sum(axis=1)
+        weight_sum = adj.sum()
+
+        if weight_sum == 0:
+            return 0.
+
+        comms = {
+            i: {
+                "id": i,
+                "members": set([i]),        # a set of node ids indicating membership 
+                "out_deg_sum": out_deg[i],  # the sum of the outdegrees of every node in this community
+                "in_deg_sum": in_deg[i],    # the sum of the indegrees of every node in this community
+                "k_out": adj[i].copy(),     # the number of incoming edges each node has connected to nodes in this community
+                "k_in": adj[:, i].copy()    # the number of outgoing edges each node has connected to nodes in this community
+            } for i in range(n_nodes)
+        }
+
+        # keep track of which community each node belongs to
+        node_map = {i: i for i in range(n_nodes)}
+
+        modularity = 1. / weight_sum * (adj.diagonal().sum() \
+                     - 1. / weight_sum * (out_deg * in_deg).sum())
+
+        while True:
+
+            old_modularity = modularity
+
+            # Stage 1 (greedy search over partitions)
+            while True:
+
+                # flag to know if any communities changed on this pass
+                changed = False
+
+                for i in range(n_nodes):
+
+                    neighbors_in = set(np.where(adj[:, i] > 0)[0])
+                    neighbors_out = set(np.where(adj[i] > 0)[0])
+                    neighbors = neighbors_in.union(neighbors_out)
+
+                    best_delta = 0
+                    best_comm = None
+                    comms_tried = set([node_map[i]])
+
+                    for j in neighbors:
+
+                        # if we already tried to move node i into node j's community,
+                        # don't bother trying again
+                        if node_map[j] in comms_tried:
+                            continue    
+                        comms_tried.add(node_map[j])
+
+                        # calculate the change in modularity due to adding node i
+                        # to node j's community
+                        new_comm = comms[node_map[j]]
+                        delta_add = 1. / weight_sum * new_comm["k_in"][i] \
+                                    + 1. / weight_sum * new_comm["k_out"][i] \
+                                    - in_deg[i] / (weight_sum ** 2) * new_comm["out_deg_sum"] \
+                                    - out_deg[i] / (weight_sum ** 2) * new_comm["in_deg_sum"] \
+                                    + 1. / weight_sum * (adj[i, i] - (in_deg[i] * out_deg[i]) / weight_sum)
+
+                        # calculate the change in modularity due to removing node i
+                        # from its current community
+                        old_comm = comms[node_map[i]]
+                        delta_remove = -1. / weight_sum * (old_comm["k_in"][i] - adj[i, i]) \
+                                       - 1. / weight_sum * (old_comm["k_out"][i] - adj[i, i]) \
+                                       + in_deg[i] / (weight_sum ** 2) * (old_comm["out_deg_sum"] - out_deg[i]) \
+                                       + out_deg[i] / (weight_sum ** 2) * (old_comm["in_deg_sum"] - in_deg[i]) \
+                                       - 1. / weight_sum * (adj[i, i] - (in_deg[i] * out_deg[i]) / weight_sum)
+
+                        # keep track of the overall change
+                        delta = delta_add + delta_remove
+                        if delta > best_delta:
+                            best_delta = delta
+                            best_comm = new_comm
+
+                    # if we found a positive change in modularity, then move node i into its new
+                    # community
+                    if best_delta > 0:
+                        modularity += best_delta
+                        changed = True
+                        old_comm = comms[node_map[i]]
+                        best_comm["members"].add(i)
+                        best_comm["out_deg_sum"] += out_deg[i]
+                        best_comm["in_deg_sum"] += in_deg[i]
+                        best_comm["k_out"] += adj[i]
+                        best_comm["k_in"] += adj[:, i]
+                        node_map[i] = best_comm["id"]
+                        old_comm["members"].remove(i)
+                        if len(old_comm["members"]) == 0:
+                            del comms[old_comm["id"]]
+                        else:
+                            old_comm["out_deg_sum"] -= out_deg[i]
+                            old_comm["in_deg_sum"] -= in_deg[i]
+                            old_comm["k_out"] -= adj[i]
+                            old_comm["k_in"] -= adj[:, i]
+
+                # if there are no more improvements to be made, go on to stage 2
+                if not changed:
+                    break
+
+            # Stage 2 (define a new graph whose nodes are the communities from stage 1)
+
+            # if the modularity didn't increase during stage 1, return the local maximum    
+            if old_modularity == modularity:
+                return modularity
+
+            # form the new graph and put each new node into its own community   
+            n_new_nodes = len(comms)
+            new_adj = np.zeros((n_new_nodes, n_new_nodes))
+            new_comms = {}
+            k = 0
+            for i in comms:
+                new_comms[k] = {
+                    "id": k,
+                    "members": set([k]),
+                    "out_deg_sum": comms[i]["out_deg_sum"],
+                    "in_deg_sum": comms[i]["in_deg_sum"],
+                    "k_out": np.zeros(n_new_nodes),
+                    "k_in": np.zeros(n_new_nodes)
+                }
+                k += 1
+            k = 0
+            for i in comms:
+                l = 0
+                for j in comms:
+                    new_adj[k, l] = comms[i]["k_out"][list(comms[j]["members"])].sum()
+                    new_comms[k]["k_out"][l] = new_adj[k, l]
+                    new_comms[l]["k_in"][k] = new_adj[k, l]
+                    l += 1
+                k += 1
+            adj = new_adj
+            comms = new_comms
+            in_deg = adj.sum(axis=0)
+            out_deg = adj.sum(axis=1)
+            n_nodes = len(comms)
+            node_map = {i: i for i in range(n_nodes)}
+            weight_sum = adj.sum()
+
+            if weight_sum == 0:
+                return 0.
+        

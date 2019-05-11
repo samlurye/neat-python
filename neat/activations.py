@@ -6,12 +6,16 @@ and code for adding new user-defined ones
 from __future__ import division
 import math
 import types
-
+import numpy as np
 
 def sigmoid_activation(z):
     z = max(-60.0, min(60.0, 5.0 * z))
     return 1.0 / (1.0 + math.exp(-z))
 
+def sigmoid_np(z):
+    z = 5.0 * z
+    z = np.clip(z, -60.0, 60.0)
+    return 1. / (1. + np.exp(-z))
 
 def tanh_activation(z):
     z = max(-60.0, min(60.0, 2.5 * z))
@@ -25,26 +29,11 @@ def sin_activation(z):
 
 def gauss_activation(z):
     z = max(-3.4, min(3.4, z))
-    return math.exp(-5.0 * z ** 2)
+    return math.exp(-5.0 * z**2)
 
 
 def relu_activation(z):
     return z if z > 0.0 else 0.0
-
-
-def elu_activation(z):
-    return z if z > 0.0 else math.exp(z) - 1
-
-
-def lelu_activation(z):
-    leaky = 0.005
-    return z if z > 0.0 else leaky * z
-
-
-def selu_activation(z):
-    lam = 1.0507009873554804934193349852946
-    alpha = 1.6732632423543772848170429916717
-    return lam * z if z > 0.0 else lam * alpha * (math.exp(z) - 1)
 
 
 def softplus_activation(z):
@@ -63,7 +52,7 @@ def clamped_activation(z):
 def inv_activation(z):
     try:
         z = 1.0 / z
-    except ArithmeticError:  # handle overflows
+    except ArithmeticError: # handle overflows
         return 0.0
     else:
         return z
@@ -94,6 +83,8 @@ def square_activation(z):
 def cube_activation(z):
     return z ** 3
 
+def clamp_activation(z):
+    return 0. if z <= 0 else 1.
 
 class InvalidActivationFunction(TypeError):
     pass
@@ -106,7 +97,7 @@ def validate_activation(function):
                        types.LambdaType)):
         raise InvalidActivationFunction("A function object is required.")
 
-    if function.__code__.co_argcount != 1:  # avoid deprecated use of `inspect`
+    if function.__code__.co_argcount != 1: # avoid deprecated use of `inspect`
         raise InvalidActivationFunction("A single-argument function is required.")
 
 
@@ -115,7 +106,6 @@ class ActivationFunctionSet(object):
     Contains the list of current valid activation functions,
     including methods for adding and getting them.
     """
-
     def __init__(self):
         self.functions = {}
         self.add('sigmoid', sigmoid_activation)
@@ -123,9 +113,6 @@ class ActivationFunctionSet(object):
         self.add('sin', sin_activation)
         self.add('gauss', gauss_activation)
         self.add('relu', relu_activation)
-        self.add('elu', elu_activation)
-        self.add('lelu', lelu_activation)
-        self.add('selu', selu_activation)
         self.add('softplus', softplus_activation)
         self.add('identity', identity_activation)
         self.add('clamped', clamped_activation)
@@ -136,6 +123,8 @@ class ActivationFunctionSet(object):
         self.add('hat', hat_activation)
         self.add('square', square_activation)
         self.add('cube', cube_activation)
+        self.add('clamp', clamp_activation)
+        self.add('sigmoid_np', sigmoid_np)
 
     def add(self, name, function):
         validate_activation(function)

@@ -86,6 +86,7 @@ class BaseReporter(object):
     def info(self, msg):
         pass
 
+############# BEGIN LURYE/VIEGO CODE #############
 class ModularityReporter(BaseReporter):
 
     def __init__(self, freq):
@@ -103,6 +104,7 @@ class ModularityReporter(BaseReporter):
             self.stddevs.append(stdev(modularities))
             print("\n\nMODULARITY (MOST FIT): {:.4f}\nMEAN MODULARITY: {:.4f}\n\n".format(self.best[-1], self.means[-1]))
         self.ctr += 1
+############# END LURYE/VIEGO CODE #############
 
 class StdOutReporter(BaseReporter):
     """Uses `print` to output information about the run; an example reporter class."""

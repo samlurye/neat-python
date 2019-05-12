@@ -131,6 +131,7 @@ class DefaultGenomeConfig(object):
                 self.structural_mutation_surer)
             raise RuntimeError(error_string)
 
+############# BEGIN LURYE/VIEGO CODE #############
 class LayeredGenomeConfig(DefaultGenomeConfig):
 
     def __init__(self, params):
@@ -141,6 +142,7 @@ class LayeredGenomeConfig(DefaultGenomeConfig):
             setattr(self, p.name, p.interpret(params))
         self.num_hidden_per_layer = [int(i) for i in self.num_hidden_per_layer]
         self.num_layers = len(self.num_hidden_per_layer) + 2
+############# END LURYE/VIEGO CODE #############
 
 class DefaultGenome(object):
     """
@@ -584,6 +586,9 @@ class DefaultGenome(object):
             connection = self.create_connection(config, input_id, output_id)
             self.connections[connection.key] = connection
 
+############# BEGIN LURYE/VIEGO CODE #############
+# Note that a lot of these methods are basically copied from the DefaultGenome
+# class but with some minor changes
 class LayeredGenome(DefaultGenome):
 
     def __init__(self, key):
@@ -907,4 +912,4 @@ class LayeredGenome(DefaultGenome):
 
             if weight_sum == 0:
                 return 0.
-        
+############# END LURYE/VIEGO CODE #############        

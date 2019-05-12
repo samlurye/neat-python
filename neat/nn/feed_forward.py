@@ -21,7 +21,9 @@ class FeedForwardNetwork(object):
             node_inputs = []
             for i, w in links:
                 node_inputs.append(self.values[i] * w)
+            ############# BEGIN LURYE/VIEGO CODE #############
             node_inputs = np.array(node_inputs)
+            ############# END LURYE/VIEGO CODE #############
             s = agg_func(node_inputs)
             self.values[node] = act_func(bias + response * s)
 

@@ -12,10 +12,12 @@ def sigmoid_activation(z):
     z = max(-60.0, min(60.0, 5.0 * z))
     return 1.0 / (1.0 + math.exp(-z))
 
+############# BEGIN LURYE/VIEGO CODE #############
 def sigmoid_np(z):
     z = 5.0 * z
     z = np.clip(z, -60.0, 60.0)
     return 1. / (1. + np.exp(-z))
+############# END LURYE/VIEGO CODE #############
 
 def tanh_activation(z):
     z = max(-60.0, min(60.0, 2.5 * z))
@@ -83,9 +85,6 @@ def square_activation(z):
 def cube_activation(z):
     return z ** 3
 
-def clamp_activation(z):
-    return 0. if z <= 0 else 1.
-
 class InvalidActivationFunction(TypeError):
     pass
 
@@ -123,8 +122,9 @@ class ActivationFunctionSet(object):
         self.add('hat', hat_activation)
         self.add('square', square_activation)
         self.add('cube', cube_activation)
-        self.add('clamp', clamp_activation)
+        ############# BEGIN LURYE/VIEGO CODE #############
         self.add('sigmoid_np', sigmoid_np)
+        ############# END LURYE/VIEGO CODE #############
 
     def add(self, name, function):
         validate_activation(function)

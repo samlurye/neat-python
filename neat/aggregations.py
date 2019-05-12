@@ -21,8 +21,10 @@ def product_aggregation(x): # note: `x` is a list or other iterable
 def sum_aggregation(x):
     return sum(x)
 
+############# BEGIN LURYE/VIEGO CODE #############
 def sum_np(x):
     return x.sum(axis=0)
+############# END LURYE/VIEGO CODE #############
 
 def max_aggregation(x):
     return max(x)
@@ -66,7 +68,9 @@ class AggregationFunctionSet(object):
         self.add('maxabs', maxabs_aggregation)
         self.add('median', median_aggregation)
         self.add('mean', mean_aggregation)
+        ############# BEGIN LURYE/VIEGO CODE #############
         self.add('sum_np', sum_np)
+        ############# END LURYE/VIEGO CODE #############
 
     def add(self, name, function):
         validate_aggregation(function)
